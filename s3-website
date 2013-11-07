@@ -1,0 +1,136 @@
+#!/bin/bash
+
+AWS_REGION=${AWS_REGION-"us-east-1"}
+usage(){
+    echo "Usage: $(dirname $0) src-path s3-bucket"
+}
+
+# Check for src dir
+if [[ -z "$1" ]]
+then
+    usage
+    echo "src not specified"
+    exit 1;
+fi
+SRC=$1
+
+# Check for dest bucket
+if [[ -z "$2" ]]
+then
+    usage
+    echo "s3-bucket not specified"
+    exit 1;
+fi
+S3_BUCKET=$2
+
+# check for AWS client
+AWS=$(which aws)
+if [[ -z $AWS ]]
+then
+  echo -e "${RED}AWS cli not installed. "
+  exit 1
+fi
+
+CSS_COMPRESSION=1
+JS_COMPRESSION=1
+HTML_COMPRESSION=1
+JAVA=$(which java)
+RED='\e[0;31m'
+NOCOLOR='\e[0m'
+COMPRESSOR_LIBS=$(dirname $(realpath $0))/lib
+TMPDIR=$(mktemp -d --suffix s3)
+
+if [[ -z $JAVA ]]
+then
+  echo -e "${RED}Java not installed.  All compressors disabled${NOCOLOR}"
+  CSS_COMPRESSION=0
+  JS_COMPRESSION=0
+  HTML_COMPRESSION=0
+fi
+
+# Create the bucket
+$AWS --region $AWS_REGION s3 mb s3://$S3_BUCKET
+
+# Setup WS bucket
+WS_CONFIG=$( cat <<EOF
+{
+    "IndexDocument": {
+        "Suffix":"index.html"
+    }
+}
+EOF
+)
+
+# Setup the bucket as a static website
+echo $WS_CONFIG > $TMPDIR/.aws.s3.config
+$AWS --region $AWS_REGION s3api put-bucket-website --bucket $S3_BUCKET --website-configuration file:///$TMPDIR/.aws.s3.config
+rm $TMPDIR/.aws.s3.config
+$AWS --region $AWS_REGION s3api put-bucket-acl --bucket $S3_BUCKET --grant-read 'uri="http://acs.amazonaws.com/groups/global/AllUsers"'
+
+echo "Copying $SRC to $TMPDIR"
+cp -r $SRC/* $TMPDIR
+# AWS CLI doesn't seem to honor include/exclude with absolute paths so
+# change to the temp dir.
+pushd $SRC
+
+# Sync Javascript and CSS assets
+echo "Compressing, gzipping and syncing .js and .css files..."
+for f in $(find . -name '*.js'); do
+  if [[ $JS_COMPRESSION -eq 1 ]]
+  then
+    java -jar $COMPRESSOR_LIBS/yuicompressor-2.4.8.jar --type js -o $f $f;
+  fi
+
+  if [ -e $f.gz ]
+  then
+    rm $f.gz
+  fi
+  gzip -9 $f; rename 's/\.gz//' $f.gz;
+done;
+
+for f in $(find . -name '*.css'); do
+  if [[ $CSS_COMPRESSION -eq 1 ]]
+  then
+    java -jar $COMPRESSOR_LIBS/yuicompressor-2.4.8.jar --type css -o $f $f;
+  fi
+
+  if [ -e $f.gz ]
+  then
+    rm $f.gz
+  fi
+  gzip -9 $f; rename 's/\.gz//' $f.gz;
+done;
+
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.js' --include '*.min' --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT" --content-type "application/javascript" --content-encoding="gzip" . s3://$S3_BUCKET/
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.css' --include "*.min" --content-type "text/css" --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT"  --content-encoding="gzip" . s3://$S3_BUCKET/
+
+
+echo "Syncing media files..."
+$AWS --region $AWS_REGION s3 sync --acl public-read --exclude '*.*' --include '*.gif' --include '*.png' --include '*.jpg' --include '*.ico' --expires "Sat, 20 Nov 2020 18:46:39 GMT" --cache-control="public, max-age=31556900"  . s3://$S3_BUCKET/
+
+# Sync html files
+echo "Syncing .html"
+for f in $(find . -name '*.html'); do
+  if [ -d $f ]
+  then
+    continue
+  fi
+
+  if [[ $HTML_COMPRESSION -eq 1 ]]
+  then
+    java -jar $COMPRESSOR_LIBS/htmlcompressor-1.5.3.jar --type html --compress-js --compress-css -o $f $f;
+  fi
+  gzip -9 $f; rename 's/\.gz//' $f.gz;
+done;
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include  '*.html' --content-encoding "gzip" --cache-control "max-age=7200, must-revalidate" . s3://$S3_BUCKET/
+
+# Sync everything else, but ignore the assets!
+echo "Syncing everything else"
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '.DS_Store' --exclude "*.yml" --exclude 'assets/' --exclude "*.gz" --exclude "*.js" --exclude "*.css" --exclude "*.png" --exclude "*.jpg" --exclude "*.gif" . s3://$S3_BUCKET/
+
+# Sync: remaining files & delete removed
+$AWS s3 --region $AWS_REGION sync --acl public-read --delete  . s3://$S3_BUCKET/
+
+# Cleanup
+rm -rf $TMPDIR
+popd
