@@ -61,6 +61,8 @@ WS_CONFIG=$( cat <<EOF
 EOF
 )
 
+set -e
+
 # Setup the bucket as a static website
 echo $WS_CONFIG > $TMPDIR/.aws.s3.config
 $AWS --region $AWS_REGION s3api put-bucket-website --bucket $S3_BUCKET --website-configuration file:///$TMPDIR/.aws.s3.config
