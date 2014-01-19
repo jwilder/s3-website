@@ -111,13 +111,13 @@ for f in $(find . -name '*.woff' -o -name '*.eot' -o -name '*.ttf' -o -name '*.s
   gzip -9 $f; rename 's/\.gz//' $f.gz;
 done;
 
-$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.js' --include '*.min' --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT" --content-type "application/javascript" --content-encoding="gzip" . s3://$S3_BUCKET/
-$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.css' --include "*.min" --content-type "text/css" --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT"  --content-encoding="gzip" . s3://$S3_BUCKET/
-$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.woff' --include "*.eot" --include "*.svg" --include "*.ttf" --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT"  --content-encoding="gzip" . s3://$S3_BUCKET/
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.js' --include '*.min' --cache-control="public, max-age=31556900" --expires "$(date -u -d '5 years' "+%a, %d %b %Y %T %Z")" --content-type "application/javascript" --content-encoding="gzip" . s3://$S3_BUCKET/
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.css' --include "*.min" --content-type "text/css" --cache-control="public, max-age=31556900" --expires "$(date -u -d '5 years' "+%a, %d %b %Y %T %Z")"  --content-encoding="gzip" . s3://$S3_BUCKET/
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.woff' --include "*.eot" --include "*.svg" --include "*.ttf" --cache-control="public, max-age=31556900" --expires "$(date -u -d '5 years' "+%a, %d %b %Y %T %Z")"  --content-encoding="gzip" . s3://$S3_BUCKET/
 
 
 echo "Syncing media files..."
-$AWS --region $AWS_REGION s3 sync --acl public-read --exclude '*.*' --include '*.gif' --include '*.png' --include '*.jpg' --include '*.ico' --expires "Sat, 20 Nov 2020 18:46:39 GMT" --cache-control="public, max-age=31556900"  . s3://$S3_BUCKET/
+$AWS --region $AWS_REGION s3 sync --acl public-read --exclude '*.*' --include '*.gif' --include '*.png' --include '*.jpg' --include '*.ico' --expires "$(date -u -d '5 years' "+%a, %d %b %Y %T %Z")" --cache-control="public, max-age=31556900"  . s3://$S3_BUCKET/
 
 # Sync html files
 echo "Syncing .html"
