@@ -73,7 +73,7 @@ echo "Copying $SRC to $TMPDIR"
 cp -r $SRC/* $TMPDIR
 # AWS CLI doesn't seem to honor include/exclude with absolute paths so
 # change to the temp dir.
-pushd $SRC
+pushd $TMPDIR
 
 # Sync Javascript and CSS assets
 echo "Compressing, gzipping and syncing .js, .css and font files..."
