@@ -74,7 +74,7 @@ cp -r $SRC/* $TMPDIR
 pushd $SRC
 
 # Sync Javascript and CSS assets
-echo "Compressing, gzipping and syncing .js and .css files..."
+echo "Compressing, gzipping and syncing .js, .css and font files..."
 for f in $(find . -name '*.js'); do
   if [[ $JS_COMPRESSION -eq 1 ]]
   then
@@ -101,8 +101,17 @@ for f in $(find . -name '*.css'); do
   gzip -9 $f; rename 's/\.gz//' $f.gz;
 done;
 
+for f in $(find . -name '*.woff' -o -name '*.eot' -o -name '*.ttf' -o -name '*.svg'); do
+  if [ -e $f.gz ]
+  then
+    rm $f.gz
+  fi
+  gzip -9 $f; rename 's/\.gz//' $f.gz;
+done;
+
 $AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.js' --include '*.min' --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT" --content-type "application/javascript" --content-encoding="gzip" . s3://$S3_BUCKET/
 $AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.css' --include "*.min" --content-type "text/css" --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT"  --content-encoding="gzip" . s3://$S3_BUCKET/
+$AWS s3 --region $AWS_REGION sync --acl public-read --exclude '*.*' --include '*.woff' --include "*.eot" --include "*.svg" --include "*.ttf" --cache-control="public, max-age=31556900" --expires "Sat, 20 Nov 2020 18:46:39 GMT"  --content-encoding="gzip" . s3://$S3_BUCKET/
 
 
 echo "Syncing media files..."
